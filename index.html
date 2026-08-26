@@ -418,8 +418,11 @@ const SOURCE_SHEET_NAME = "Obracun po Zaposlenom";
 /* Živa tabela naloga (trenutno: samo P&G dileri) — Google Sheet koji
    softver/administrator ažurira, portal ga čita uživo pri otvaranju
    i na zahtev iz Import centra. */
-const LIVE_SHEET_ID = "131FEwVzYYlQPZJXMtR5QR0ZCjveViP9c5SxiuUSk8tE";
-const LIVE_SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${LIVE_SHEET_ID}/export?format=csv&gid=0`;
+/* Živa tabela naloga (trenutno: samo P&G dileri) — Google Sheet objavljen
+   preko File → Share → Publish to web (CSV). Ovaj format šalje ispravna
+   CORS zaglavlja za pozive iz browsera, za razliku od običnog "export"
+   linka koji radi samo za direktan download, ne za fetch() sa drugog sajta. */
+const LIVE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSuKCMN383zejBpmg88CDZqFmO43LzyOidpRSLQvgLGmTUWqtshkict7-4e1pn3PUgbJ7axUKLNKcts/pub?output=csv";
 const SOURCE_COLUMNS = [
   "Ime","Prezime","Broj dokumenta","Datum dokument","Merilac","NCN","Neto_suma","Iznos",
   "Broj_PVC","Broj_AL","BrojRoletni","BR_Komarnika","Broj_Okapnica","Broj_Solbanaka","Broj_Panela",
