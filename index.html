@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow, noarchive" />
 <title>Sunce Marinković — Portal za praćenje naloga</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -541,10 +542,15 @@ function hasRecentDateChange(history, orderId){
 }
 
 /* STATUS ENGINE — raw data (Datum montaže) -> calculated status.
-   Ovo je namerno odvojeno od sirovih podataka (spec §11). */
-function installationStatus(installation_date){
+   Ovo je namerno odvojeno od sirovih podataka (spec §11).
+   forDealer: kada je true, tekst koji vidi kupac/diler kaže "isporuka"
+   umesto "montaža" — kolona i logika ostaju iste, menja se samo naziv. */
+function installationStatus(installation_date, forDealer){
+  const word = forDealer ? "isporuke" : "montaže";
+  const wordCap = forDealer ? "Isporuka" : "Montaža";
+  const wordPlanned = forDealer ? "Planirana isporuka" : "Planirana montaža";
   if(!installation_date){
-    return { code:"NO_DATE", label:"Termin montaže još nije određen.", badge:"status-nodate", countdown:null };
+    return { code:"NO_DATE", label:`Termin ${word} još nije određen.`, badge:"status-nodate", countdown:null };
   }
   const diff = daysBetween(installation_date);
   if(diff < 0){
@@ -554,17 +560,17 @@ function installationStatus(installation_date){
     };
   }
   if(diff === 0){
-    return { code:"TODAY", label:"Montaža danas", badge:"status-today", countdown:"Danas", countdownClass:"amber" };
+    return { code:"TODAY", label:`${wordCap} danas`, badge:"status-today", countdown:"Danas", countdownClass:"amber" };
   }
   return {
-    code:"PLANNED", label:"Planirana montaža", badge:"status-planned",
+    code:"PLANNED", label:wordPlanned, badge:"status-planned",
     countdown:`Za ${diff} ${daniText(diff)}`, countdownClass: diff<=3 ? "amber":"steel"
   };
 }
 
-function customerFacingMessage(status){
+function customerFacingMessage(status, forDealer){
   if(status.code === "OVERDUE"){
-    return "Planirani termin montaže je prošao. Molimo vas da kontaktirate svog zastupnika.";
+    return `Rok ${forDealer ? "isporuke" : "montaže"} je prošao. Javite se svom zastupniku i dogovorite novi termin.`;
   }
   return null;
 }
@@ -765,12 +771,13 @@ function customerForOrder(customers, orderId){
 }
 
 function buildDeadlineChangeMessage(customer, orderId, oldDate, newDate){
-  const dir = (oldDate && newDate) ? (newDate > oldDate ? "pomeren na kasniji datum" : "pomeren na raniji datum") : "određen";
-  const oldPart = oldDate ? `sa ${formatSr(oldDate)} ` : "";
-  return `Poštovani, obaveštavamo Vas da je planirani datum montaže za nalog ${orderId} ${dir}: ${oldPart}na ${formatSr(newDate)} Sunce Marinković.`;
+  if(oldDate && newDate){
+    return `Poštovani, rok isporuke za nalog ${orderId} promenjen je na ${formatSr(newDate)} (raniji datum je bio ${formatSr(oldDate)}). Sunce Marinković.`;
+  }
+  return `Poštovani, rok isporuke za nalog ${orderId} je određen: ${formatSr(newDate)} Sunce Marinković.`;
 }
 
-const EMAIL_SUBJECT = "Promena roka montaže — Sunce Marinković";
+const EMAIL_SUBJECT = "Sunce Marinković: promena roka isporuke";
 
 const NotificationService = {
   /* Vraća listu notifikacija koje treba poslati za promenu roka na
@@ -1095,7 +1102,7 @@ function CustomerDashboard({ customer, myOrders, setView, history }){
     .map(o => ({ o, diff: daysBetween(o.installation_date) }))
     .filter(x => x.diff >= 0)
     .sort((a,b) => a.diff - b.diff)[0];
-  const overdueCount = active.filter(o => installationStatus(o.installation_date).code === "OVERDUE").length;
+  const overdueCount = active.filter(o => installationStatus(o.installation_date, true).code === "OVERDUE").length;
 
   return (
     <div>
@@ -1111,7 +1118,7 @@ function CustomerDashboard({ customer, myOrders, setView, history }){
           <div className="value" style={{fontSize:18}}>
             {upcoming ? formatSr(upcoming.o.installation_date) : "—"}
           </div>
-          {upcoming && <div className="small muted">{installationStatus(upcoming.o.installation_date).countdown}</div>}
+          {upcoming && <div className="small muted">{installationStatus(upcoming.o.installation_date, true).countdown}</div>}
         </div>
         <div className="stat">
           <div className="label">Rok prošao</div>
@@ -1136,7 +1143,7 @@ function CustomerDashboard({ customer, myOrders, setView, history }){
 }
 
 function CustomerOrderCard({ order, onClick, changed }){
-  const st = installationStatus(order.installation_date);
+  const st = installationStatus(order.installation_date, true);
   return (
     <div className="order-card bracket" onClick={onClick}>
       <div className="top">
@@ -1152,7 +1159,7 @@ function CustomerOrderCard({ order, onClick, changed }){
       <ProductSummary order={order} />
       <div className="bottom">
         <div>
-          <div className="xsmall muted">Planirana montaža</div>
+          <div className="xsmall muted">Planirana isporuka</div>
           <div style={{fontWeight:600}}>{formatSr(order.installation_date) || "Nije određeno"}</div>
         </div>
         {st.countdown && <div className={`countdown ${st.countdownClass}`}>{st.countdown}</div>}
@@ -1169,7 +1176,7 @@ function CustomerOrderList({ myOrders, setView, history }){
   const [filter, setFilter] = useState("svi");
 
   const filtered = myOrders.filter(o => {
-    const st = installationStatus(o.installation_date).code;
+    const st = installationStatus(o.installation_date, true).code;
     if(filter === "u-roku" && (st==="OVERDUE")) return false;
     if(filter === "prosao-rok" && st!=="OVERDUE") return false;
     if(filter === "bez-termina" && st!=="NO_DATE") return false;
@@ -1205,10 +1212,12 @@ function CustomerOrderList({ myOrders, setView, history }){
 /* ============================================================
    KUPAC — DETALJI NALOGA
    ============================================================ */
-function CustomerOrderDetail({ order, setView, recentDateChange }){
+function CustomerOrderDetail({ order, setView, recentDateChange, forDealer }){
   if(!order) return <EmptyState title="Nalog nije pronađen ili nemate pristup ovom nalogu." />;
-  const st = installationStatus(order.installation_date);
-  const msg = customerFacingMessage(st);
+  const word = forDealer ? "isporuke" : "montaže";
+  const wordCap = forDealer ? "Isporuka" : "Montaža";
+  const st = installationStatus(order.installation_date, forDealer);
+  const msg = customerFacingMessage(st, forDealer);
   const cv = toCustomerView(order);
 
   let shiftNote = null;
@@ -1217,18 +1226,18 @@ function CustomerOrderDetail({ order, setView, recentDateChange }){
     if(oldD && newD){
       const pushedLater = newD > oldD;
       shiftNote = pushedLater
-        ? `Planirani datum montaže je ažuriran: sa ${formatSr(oldD)} na ${formatSr(newD)}.`
-        : `Dobra vest: planirani datum montaže je pomeren ranije, sa ${formatSr(oldD)} na ${formatSr(newD)}.`;
+        ? `Rok ${word} je pomeren na kasniji datum: ${formatSr(newD)} (umesto ${formatSr(oldD)}).`
+        : `Dobra vest, rok ${word} je pomeren na raniji datum: ${formatSr(newD)} (umesto ${formatSr(oldD)}).`;
     } else if(!oldD && newD){
-      shiftNote = `Planirani datum montaže je određen: ${formatSr(newD)}.`;
+      shiftNote = `Rok ${word} je određen: ${formatSr(newD)}.`;
     }
   }
 
   const steps = [
     { key:"received", label:"Nalog primljen", done:true },
     { key:"measured", label:"Merenje obavljeno", done: !!order.measurement_date },
-    { key:"planned", label:"Montaža planirana", done: !!order.installation_date },
-    { key:"installed", label: st.code==="OVERDUE" ? "Montaža (rok prošao)" : "Montaža", done:false },
+    { key:"planned", label:`${wordCap} planirana`, done: !!order.installation_date },
+    { key:"installed", label: st.code==="OVERDUE" ? `${wordCap} (rok prošao)` : wordCap, done:false },
   ];
 
   return (
@@ -1253,7 +1262,7 @@ function CustomerOrderDetail({ order, setView, recentDateChange }){
         <div className="card" style={{padding:20}}>
           <h3 style={{fontSize:14,textTransform:"uppercase",letterSpacing:"0.05em",color:"var(--steel)",marginBottom:12}}>Realizacija</h3>
           <div className="kv"><span className="k">Datum merenja</span><span className="v">{formatSr(cv.measurement_date) || "Nije zakazano"}</span></div>
-          <div className="kv"><span className="k">Planirana montaža</span><span className="v">{formatSr(cv.installation_date) || "Nije određeno"}</span></div>
+          <div className="kv"><span className="k">Planirana isporuka</span><span className="v">{formatSr(cv.installation_date) || "Nije određeno"}</span></div>
           {st.countdown && <div className="kv"><span className="k">Preostalo</span><span className={`v countdown ${st.countdownClass}`}>{st.countdown}</span></div>}
         </div>
         <div className="card" style={{padding:20}}>
@@ -2089,18 +2098,22 @@ function isoWeekNumber(d){
    ============================================================ */
 function categorizePublicOrders(orders){
   const list = Object.values(orders);
-  const pg = list.filter(o => o.business_area === "Pick And Go dileri");
-  const mls = pg.filter(o => fullName(o).toLowerCase().includes("master line"));
-  const mlsIds = new Set(mls.map(o => o.order_id));
-  const drugiPG = pg.filter(o => !mlsIds.has(o.order_id));
-  // "Fizička lica" = sve ostalo, izuzev "Zaposleni" (interne narudžbine zaposlenih — ne izlažemo ih javnoj pretrazi)
-  const fizicka = list.filter(o => o.business_area !== "Pick And Go dileri" && o.business_area !== "Zaposleni");
-  return { fizicka, pg, mls, drugiPG };
+  const dealers = list.filter(o => o.business_area === "Pick And Go dileri");
+  // "Ostali kupci" = sve ostalo, izuzev "Zaposleni" (interne narudžbine zaposlenih)
+  const others = list.filter(o => o.business_area !== "Pick And Go dileri" && o.business_area !== "Zaposleni");
+  return { dealers, others };
 }
 
-function PublicResultsTable({ rows, history, onSelect, showOznaka }){
+function searchByOrderId(pool, q){
+  const s = q.toLowerCase().trim();
+  if(!s) return [];
+  return pool.filter(o => o.order_id.toLowerCase().includes(s) || (o.order_label||"").toLowerCase().includes(s));
+}
+
+function PublicResultsTable({ rows, history, onSelect, showOznaka, forDealer }){
+  const dateLabel = forDealer ? "Datum isporuke" : "Datum montaže";
   if(rows.length === 0){
-    return <div className="pub-empty"><b>Nema rezultata.</b>Pokušajte drugi pojam za pretragu.</div>;
+    return <div className="pub-empty"><b>Nismo pronašli nalog.</b>Proverite broj naloga ili oznaku i pokušajte ponovo.</div>;
   }
   return (
     <>
@@ -2110,13 +2123,13 @@ function PublicResultsTable({ rows, history, onSelect, showOznaka }){
             <th>Broj naloga</th>
             <th>Naziv</th>
             {showOznaka && <th>Oznaka</th>}
-            <th>Datum montaže</th>
+            <th>{dateLabel}</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {rows.slice(0,150).map(o => {
-            const st = installationStatus(o.installation_date);
+            const st = installationStatus(o.installation_date, forDealer);
             const changed = hasRecentDateChange(history, o.order_id);
             return (
               <tr key={o.order_id} onClick={()=>onSelect(o.order_id)}>
@@ -2135,7 +2148,7 @@ function PublicResultsTable({ rows, history, onSelect, showOznaka }){
       </table>
       <div className="mobile-cards">
         {rows.slice(0,150).map(o => {
-          const st = installationStatus(o.installation_date);
+          const st = installationStatus(o.installation_date, forDealer);
           const changed = hasRecentDateChange(history, o.order_id);
           return (
             <div key={o.order_id} className="pub-result-card" onClick={()=>onSelect(o.order_id)}>
@@ -2145,7 +2158,7 @@ function PublicResultsTable({ rows, history, onSelect, showOznaka }){
               </div>
               <div className="small">{fullName(o)}</div>
               {showOznaka && o.order_label && <div className="xsmall muted">Oznaka: {o.order_label}</div>}
-              <div className="xsmall muted" style={{marginTop:4}}>Montaža: {formatSr(o.installation_date) || "nije određeno"}</div>
+              <div className="xsmall muted" style={{marginTop:4}}>{dateLabel}: {formatSr(o.installation_date) || "nije određeno"}</div>
               {changed && <div className="xsmall" style={{color:"var(--steel)",marginTop:2}}>Termin ažuriran</div>}
             </div>
           );
@@ -2156,46 +2169,26 @@ function PublicResultsTable({ rows, history, onSelect, showOznaka }){
   );
 }
 
-function PublicSearchScreen({ title, badge, description, placeholder, footnote, pool, matchFn, history, onSelect, onBack, showOznaka }){
+function PublicSearchScreen({ title, forDealer, pool, history, onSelect, onBack }){
   const [q, setQ] = useState("");
-  const rows = q.trim().length === 0 ? [] : matchFn(pool, q.trim());
+  const rows = q.trim().length === 0 ? [] : searchByOrderId(pool, q);
+  const word = forDealer ? "isporuke" : "montaže";
   return (
     <div className="pub-main">
       <button className="pub-back" onClick={onBack}>← Nazad</button>
+      <div className="pub-eyebrow">{title}</div>
+      <h1 className="pub-h1" style={{fontSize:30}}>Gde je Vaš nalog?</h1>
+      <p className="pub-lead">Unesite broj naloga ili oznaku, i za par sekundi vidite status i planiran datum {word}.</p>
       <div className="pub-panel">
-        <div className="pub-panel-head">
-          <div>
-            <div className="pub-panel-title">{title}</div>
-            <p className="pub-panel-desc">{description}</p>
-          </div>
-          <span className="pub-filter-badge">{badge}</span>
-        </div>
         <div className="pub-search-row" style={{marginBottom:20}}>
-          <input type="text" placeholder={placeholder} value={q} onChange={e=>setQ(e.target.value)} autoFocus />
+          <input type="text" placeholder="npr. N6P33868 ili DARKO" value={q} onChange={e=>setQ(e.target.value)} autoFocus />
         </div>
         {q.trim().length === 0
-          ? <div className="pub-empty"><b>Počnite kucanje</b>{placeholder}</div>
-          : <PublicResultsTable rows={rows} history={history} onSelect={onSelect} showOznaka={showOznaka} />
+          ? <div className="pub-empty"><b>Unesite broj naloga ili oznaku gore</b>npr. N6P33868 ili DARKO</div>
+          : <PublicResultsTable rows={rows} history={history} onSelect={onSelect} showOznaka forDealer={forDealer} />
         }
       </div>
-      <div className="pub-footnote">{footnote}</div>
     </div>
-  );
-}
-
-function searchByNameOrLabelOrId(pool, q){
-  const s = q.toLowerCase();
-  return pool.filter(o =>
-    fullName(o).toLowerCase().includes(s) ||
-    (o.order_label||"").toLowerCase().includes(s) ||
-    o.order_id.toLowerCase().includes(s)
-  );
-}
-function searchByLabelOrId(pool, q){
-  const s = q.toLowerCase();
-  return pool.filter(o =>
-    (o.order_label||"").toLowerCase().includes(s) ||
-    o.order_id.toLowerCase().includes(s)
   );
 }
 
@@ -2204,84 +2197,37 @@ function PublicSearch({ orders, history, onAdminClick, liveSync }){
   const [selectedId, setSelectedId] = useState(null);
   const cats = useMemo(() => categorizePublicOrders(orders), [orders]);
   const now = new Date();
+  const forDealer = step === "dealers";
 
   const screen = (() => {
     if(step === "welcome") return (
       <div className="pub-main">
         <div className="pub-eyebrow">Dobrodošli</div>
-        <h1 className="pub-h1">Ko pretražuje naloge danas?</h1>
-        <p className="pub-lead">Izaberite tip kupca za pretragu naloga i rokova montaže.</p>
+        <h1 className="pub-h1">Ko pretražuje danas?</h1>
+        <p className="pub-lead">Izaberite da li ste diler ili kupac, pa pronađite svoj nalog za par sekundi.</p>
         <div className="pub-choice-grid">
-          <button className="pub-choice-card" onClick={()=>setStep("fizicka")}>
+          <button className="pub-choice-card" onClick={()=>setStep("dealers")}>
             <span className="pub-choice-num">01</span>
-            <h3>Fizička lica i ostali kupci</h3>
-            <p>Pretraga po imenu i prezimenu, ili po Oznaci/broju naloga.</p>
+            <h3>Dileri</h3>
+            <p>Pick&amp;Go dileri, pratite datum isporuke.</p>
             <div className="pub-choice-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
           </button>
-          <button className="pub-choice-card" onClick={()=>setStep("pg")}>
+          <button className="pub-choice-card" onClick={()=>setStep("others")}>
             <span className="pub-choice-num">02</span>
-            <h3>P&amp;G kupci</h3>
-            <p>Pick&amp;Go dileri: MLS ili ostali P&amp;G nalozi.</p>
+            <h3>Ostali kupci</h3>
+            <p>Fizička lica i ostali kupci, pratite datum montaže.</p>
             <div className="pub-choice-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
           </button>
         </div>
       </div>
     );
 
-    if(step === "pg") return (
-      <div className="pub-main">
-        <button className="pub-back" onClick={()=>setStep("welcome")}>← Nazad na početnu</button>
-        <div className="pub-eyebrow">P&amp;G kupci</div>
-        <h1 className="pub-h1" style={{fontSize:30}}>Koji diler?</h1>
-        <p className="pub-lead">Izaberite MLS (Master Line System) ili ostale Pick&amp;Go dilere.</p>
-        <div className="pub-choice-grid">
-          <button className="pub-choice-card" onClick={()=>setStep("mls")}>
-            <span className="pub-choice-num">MLS</span>
-            <h3>Master Line System</h3>
-            <p>Pretraga po Oznaci naloga (npr. ime kupca kod dilera) ili broju naloga.</p>
-            <div className="pub-choice-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
-          </button>
-          <button className="pub-choice-card" onClick={()=>setStep("drugi")}>
-            <span className="pub-choice-num">···</span>
-            <h3>Ostali P&amp;G dileri</h3>
-            <p>Pretraga po nazivu dilera, Oznaci naloga ili broju naloga.</p>
-            <div className="pub-choice-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
-          </button>
-        </div>
-      </div>
+    if(step === "dealers") return (
+      <PublicSearchScreen title="Dileri" forDealer pool={cats.dealers} history={history} onSelect={setSelectedId} onBack={()=>setStep("welcome")} />
     );
 
-    if(step === "fizicka") return (
-      <PublicSearchScreen
-        title="Fizička lica i ostali kupci" badge="Pretraga"
-        description="Unesite ime i prezime kupca, Oznaku naloga, ili broj naloga."
-        placeholder="npr. Petrović, ili N6P31234…"
-        footnote="Pretraga se vrši po koloni „Ime/Prezime“, „Oznaka“ i „Broj dokumenta“. Ne uključuje Pick&Go dilere i interne narudžbine zaposlenih."
-        pool={cats.fizicka} matchFn={searchByNameOrLabelOrId} history={history}
-        onSelect={setSelectedId} onBack={()=>setStep("welcome")} showOznaka
-      />
-    );
-
-    if(step === "mls") return (
-      <PublicSearchScreen
-        title="MLS · Master Line System" badge="MLS"
-        description="Unesite Oznaku naloga (ime Vašeg kupca) ili broj naloga."
-        placeholder="npr. IVAN JAKOVO, ili N6A31530…"
-        footnote={`Pretraga važi samo za naloge dilera Master line system (${cats.mls.length} naloga), po Oznaci ili broju naloga. Oznaka nije upisana kod svih naloga. Ako nema rezultata, probajte broj naloga.`}
-        pool={cats.mls} matchFn={searchByLabelOrId} history={history}
-        onSelect={setSelectedId} onBack={()=>setStep("pg")} showOznaka
-      />
-    );
-
-    if(step === "drugi") return (
-      <PublicSearchScreen
-        title="Ostali P&G dileri" badge="P&G"
-        description="Unesite naziv dilera, Oznaku naloga, ili broj naloga."
-        placeholder="npr. Taurora, DALIBOR, ili N6P31408…"
-        footnote={`Pretraga važi za sve ostale Pick&Go naloge (${cats.drugiPG.length} naloga), po nazivu dilera, Oznaci ili broju naloga.`}
-        pool={cats.drugiPG} matchFn={searchByNameOrLabelOrId} history={history}
-        onSelect={setSelectedId} onBack={()=>setStep("pg")} showOznaka
-      />
+    if(step === "others") return (
+      <PublicSearchScreen title="Ostali kupci" forDealer={false} pool={cats.others} history={history} onSelect={setSelectedId} onBack={()=>setStep("welcome")} />
     );
 
     return null;
@@ -2298,7 +2244,7 @@ function PublicSearch({ orders, history, onAdminClick, liveSync }){
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center"}}>
-          {liveSync?.status === "error" && <span className="xsmall" style={{color:"var(--red)",marginRight:10}} title={liveSync.message}>Prikazani su poslednji poznati podaci — živa veza nije dostupna</span>}
+          {liveSync?.status === "error" && <span className="xsmall" style={{color:"var(--red)",marginRight:10}} title={liveSync.message}>Prikazani su poslednji poznati podaci. Živa veza trenutno nije dostupna.</span>}
           <div className="pub-week-chip"><span className="dot"></span>Nedelja <b>{isoWeekNumber(now)}</b> · {now.getFullYear()}.</div>
           <button className="pub-admin-link" onClick={onAdminClick}>Administracija</button>
         </div>
@@ -2306,7 +2252,7 @@ function PublicSearch({ orders, history, onAdminClick, liveSync }){
       {screen}
       {selectedId && (
         <Modal title="Detalji naloga" onClose={()=>setSelectedId(null)} wide>
-          <CustomerOrderDetail order={orders[selectedId]} setView={()=>setSelectedId(null)} recentDateChange={getRecentDateChange(history, selectedId)} />
+          <CustomerOrderDetail order={orders[selectedId]} setView={()=>setSelectedId(null)} recentDateChange={getRecentDateChange(history, selectedId)} forDealer={forDealer} />
         </Modal>
       )}
     </div>
