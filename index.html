@@ -2098,9 +2098,11 @@ function isoWeekNumber(d){
    ============================================================ */
 function categorizePublicOrders(orders){
   const list = Object.values(orders);
-  const dealers = list.filter(o => o.business_area === "Pick And Go dileri");
-  // "Ostali kupci" = sve ostalo, izuzev "Zaposleni" (interne narudžbine zaposlenih)
-  const others = list.filter(o => o.business_area !== "Pick And Go dileri" && o.business_area !== "Zaposleni");
+  // Prepoznaje i stari zapis ("Pick And Go dileri") i novi ("06-P&G", "07-P&G"...)
+  const isDealerArea = ba => /p\s*&\s*g/i.test(ba || "") || /pick\s*and\s*go/i.test(ba || "");
+  const dealers = list.filter(o => isDealerArea(o.business_area));
+  // "Ostali kupci" = sve ostalo, izuzev dilera i "Zaposleni" (interne narudžbine zaposlenih)
+  const others = list.filter(o => !isDealerArea(o.business_area) && o.business_area !== "Zaposleni");
   return { dealers, others };
 }
 
