@@ -623,7 +623,7 @@ const ExcelImportService = {
      povlačenje iz Google Sheets-a — objavljeni CSV export nema
      "listove", pa je usedFallbackSheet uvek false). */
   readFromCsvText(csvText){
-    const wb = XLSX.read(csvText, { type:"string", cellDates:true });
+    const wb = XLSX.read(csvText, { type:"string", cellDates:false, raw:true });
     const sheetName = wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
